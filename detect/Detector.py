@@ -3,6 +3,7 @@ import torch
 import datetime
 from ruamel.yaml import YAML
 from ultralytics import YOLO
+print("[detect/Detector] imported YOLO.")
 # from Capture import Capture
 import math
 import time
@@ -23,7 +24,7 @@ class Detector:
         self.is_record = self.cfg['is_record']
         self.record_fps = self.cfg['record_fps']
         if self.is_record:
-            save_video_folder_path = "data/train_record/"  # 保存视频的文件夹
+            save_video_folder_path = "videos/detect_video_save/"  # 保存视频的文件夹
             today = time.strftime("%Y%m%d", time.localtime())  # 今日日期，例如2024年5月6日则为20240506
             today_video_folder_path = save_video_folder_path + today + "/"  # 今日的视频文件夹
             if not os.path.exists(today_video_folder_path):  # 当天的视频文件夹不存在则创建
@@ -36,14 +37,14 @@ class Detector:
             self.save_thread = threading.Thread(target=self.save_video, args=(self.out,self.frame_queue,), daemon=True)
 
         # 检测模型
-        print('Loading Car Model')
+        print('[detect/Detector] Loading Car Model')
         # 打印绝对路径
         # print(self.cfg['path']['stage_one_path'])
         self.model_car = YOLO(self.cfg['path']['stage_one_path'] , task = "detect")
 
         self.model_car2 = YOLO(self.cfg['path']['stage_two_path'])
         self.model_car3 = YOLO(self.cfg['path']['stage_three_path'])
-        print('Done\n')
+        print('[detect/Detector] Car model loaded.\n')
         # 设置参数
         self.tracker_path = self.cfg['path']['tracker_path']
         # print(self.tracker_path)
@@ -86,6 +87,7 @@ class Detector:
     # 保存视频线程开始工作
     def start_save_video(self):
         if self.is_record:
+            print('[detect/Detector] Video Recording Started.\n')
             self.save_video_working_flag = True
             self.save_thread.start()
     # 保存视频线程停止工作
@@ -93,7 +95,7 @@ class Detector:
         if self.is_record:
 
             self.save_video_working_flag = False
-            print("set stop done")
+            print("[detect/Detector] save_video_working_flag has been set to FALSE.")
             if self.out is not None:
                 self.out.release()
                 print("release done")
@@ -101,16 +103,23 @@ class Detector:
 
     # 创建线程
     def create(self, capture):
+        print('[detector] thread is going to be created.')
         if not self.init_flag:
+            print('[detector] thread is not created.')
             self.threading = threading.Thread(target=self.detect_thread, args=(capture,), daemon=True)
             self.init_flag = True
+            print('[detector] thread created.')
+        else:
+            print('[detector] thread already exists.')
 
     # 启动线程
     def start(self):
         if self.init_flag:
-            print("detect start function")
+            print("[detector] detect start function.")
             self.working_flag = True  # 先设True再开始，否则开始太快检测为False直接结束了
             self.threading.start()
+        else:
+            print('[detector] Thread is not created, thus won\'t start.')
 
     # 关闭线程
     def stop(self):

@@ -6,11 +6,11 @@ from collections import deque
 from ruamel.yaml import YAML
 
 
-mode = "camera" # "video" or "camera"
+mode = "webcam" # "video" or "camera"
 round = 11
 
 if __name__ == '__main__':
-    video_path = "data/right.mp4"
+    video_path = "videos/data/video.avi"
     detector_config_path = "configs/detector_config.yaml"
     binocular_camera_cfg_path = "configs/bin_cam_config.yaml"
     main_config_path = "configs/main_config.yaml"
@@ -19,6 +19,8 @@ if __name__ == '__main__':
 
     if mode == "video":
         capture = Video(video_path)
+    elif mode == "webcam:":
+        capture = cv2.VideoCapture(0)
     elif mode == "camera":
         capture = Capture(binocular_camera_cfg_path,"new_cam")
 

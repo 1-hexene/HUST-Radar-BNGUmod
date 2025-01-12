@@ -12,7 +12,7 @@ from stereo_camera.MvImport import MvCameraControl_class as hk
 
 # Capture类的封装
 class Capture:
-    def __init__(self, binocular_camera_cfg_path = "/home/nvidia/RadarWorkspace/code/Radar_Develop/configs/bin_cam_config.yaml",camera_name = 'new_cam'):
+    def __init__(self, binocular_camera_cfg_path = "configs/bin_cam_config.yaml",camera_name = 'new_cam'):
         cfg = YAML().load(open(binocular_camera_cfg_path, encoding='Utf-8', mode='r'))
 
         self.camera_name = camera_name

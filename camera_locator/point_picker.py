@@ -101,7 +101,7 @@ class PointsPicker:
                         msg,
                         point_on_display,
                         cv2.FONT_HERSHEY_PLAIN,
-                        1.0,
+                        10,
                         (0, 0, 255),
                         thickness=1)
         cv2.imshow(self.window, self.image_to_display)

@@ -14,12 +14,18 @@ import open3d as o3d
 from collections import deque
 from ruamel.yaml import YAML
 import os
+import rclpy
+import WebcamFucker
+
+wf = WebcamFucker.webcamFucker(webcam=0)
+wf.fuckExposure(80)
 
 mode = "video" # "video" or "camera" , 如果纯视频模式选用video,需要播放录制livox mid-70的rosbag获得点云信息
 save_video = True # 是否保存视频
 
 if __name__ == '__main__':
-    video_path = "./data/video.avi" # 请改为/path/to/video.avi
+    #video_path = "videos/data/raw_left.mp4" # 请改为/path/to/video.avi
+    video_path = "/dev/video0"
     detector_config_path = "./configs/detector_config.yaml"
     binocular_camera_cfg_path = "./configs/bin_cam_config.yaml"
     main_config_path = "./configs/main_config.yaml"
@@ -27,10 +33,11 @@ if __name__ == '__main__':
     main_cfg = YAML().load(open(main_config_path, encoding='Utf-8', mode='r'))
     # 全局变量
     global_my_color = main_cfg['global']['my_color']
+    print('[MAIN] Color is ' + global_my_color)
     is_debug = main_cfg['global']['is_debug']
 
     # 设置保存路径
-    save_video_folder_path = "/home/nvidia/RadarWorkspace/code/Radar_Develop/data/train_record/"  # 保存视频的文件夹
+    save_video_folder_path = "videos/video_save/"  # 保存视频的文件夹
     today = time.strftime("%Y%m%d", time.localtime()) # 今日日期，例如2024年5月6日则为20240506
     today_video_folder_path = save_video_folder_path + today + "/" # 今日的视频文件夹
     if not os.path.exists(today_video_folder_path): # 当天的视频文件夹不存在则创建
@@ -39,6 +46,7 @@ if __name__ == '__main__':
     video_save_path = today_video_folder_path + video_name + ".mp4" # 视频保存路径
 
     logger = RadarLog("main")
+    print('[MAIN] Logger init.')
 
     if save_video:
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 使用mp4编码器
@@ -47,16 +55,20 @@ if __name__ == '__main__':
     draw_queue = deque(maxlen=10)
     # 类初始化
     detector = Detector(detector_config_path)
+    print('[MAIN] Loading Lidar config.')
+    rclpy.init(args=None)
     lidar = Lidar(main_cfg)
+    print('[MAIN] Lidar init.')
     converter = Converter(global_my_color,converter_config_path)  # 传入的是path
     carList = CarList(main_cfg)
     logger.log("carList init")
 
-    messager = Messager(main_cfg , draw_queue)
+    # messager = Messager(main_cfg , draw_queue)
     logger.log("messager init")
 
 
 
+    print('[MAIN] Mode is ' + mode)
 
     if mode == "video":
         capture = Video(video_path)
@@ -69,6 +81,7 @@ if __name__ == '__main__':
 
     # 场地解算初始化
     converter.camera_to_field_init(capture)
+    print('[MAIN] cam to field init.')
 
     # ROI初始化
     # roi_selector = ROISelector(capture)
@@ -79,12 +92,15 @@ if __name__ == '__main__':
     fps_queue = deque(maxlen=10)
 
 
-    # 开启激光雷达线程
-
+    # 开启camera线程
     detector.create(capture)
     detector.start()
+    print('[MAIN] detector started.')
+
+    # open lidar thread 
     lidar.start()
-    messager.start()
+    print('[MAIN] lidar started.')
+    # messager.start()
 
     # 创建一个空列表来存储所有检测的结果
     all_detections = []
@@ -96,7 +112,7 @@ if __name__ == '__main__':
     # 可视化小地图绘制queue
 
 
-    print("enter main loop")
+    print("[MAIN] enter main loop")
     try:
         # 主循环
         while True:
@@ -110,10 +126,11 @@ if __name__ == '__main__':
             # 计算平均FPS
             avg_fps = sum(fps_queue) / len(fps_queue)
 
-            print("fps:",avg_fps)
+            print("[MAIN] fps:",avg_fps)
 
             # 获得推理结果
             infer_result = detector.get_results()
+
 
             # 需要打包一份给carList
             carList_results = []
@@ -126,9 +143,10 @@ if __name__ == '__main__':
                 result_img, results = infer_result
 
                 if results is not None:
-                    print("results is not none")
+                    print("[MAIN] results is not none")
+                    cv2.imshow("result", result_img)
                     if lidar.pcdQueue.point_num == 0:
-                        print("no pcd")
+                        print("[MAIN] 点阵队列空! 检查激光雷达或其驱动!")
                         continue
 
                     pc_all = lidar.get_all_pc()
@@ -172,7 +190,7 @@ if __name__ == '__main__':
                         print(len(box_pc))
                         # 如果没有获取到点，直接continue
                         if len(box_pc) == 0:
-                            print("no points in box")
+                            print("[MAIN] no points in box")
                             continue
 
                         box_pcd.points = o3d.utility.Vector3dVector(box_pc)
@@ -233,7 +251,7 @@ if __name__ == '__main__':
                         all_detections.append([frame_id] + list(all_info))
 
             # 通信
-            messager.update_enemy_car_infos(enemy_car_infos)
+            # messager.update_enemy_car_infos(enemy_car_infos)
 
 
             # 画线
@@ -288,18 +306,18 @@ if __name__ == '__main__':
                             cv2.putText(result_img, "id: {}".format(min_distance_car_id), (int(my_reprojected_point[0]), int(my_reprojected_point[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 122), 2)
                             cv2.putText(result_img, "distance: {:.2f}".format(min_distance), (int(my_reprojected_point[0]), int(my_reprojected_point[1]) + 10), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 122), 2)
                             cv2.putText(result_img, "angle: {:.2f}".format(min_distance_angle), (int(my_reprojected_point[0]), int(my_reprojected_point[1]) + 30), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 122), 2)
-                        # 将角度转为象限 ， carID , distance , quadrant
+                        # 将角度转为象限 ， carID , distance , quadr
                         quadrant = converter.angle_to_quadrant(min_distance_angle)
                         # zip
                         sentinel_alert_info = [min_distance_car_id, min_distance, quadrant]
-                        messager.update_sentinel_alert_info(sentinel_alert_info)
+                        # messager.update_sentinel_alert_info(sentinel_alert_info)
 
 
 
 
 
             if result_img is None:
-                print("result_img is none")
+                print("[MAIN] result_img is none, please wait")
                 continue
             if is_debug:
                 cv2.putText(result_img, "fps: {:.2f}".format(avg_fps), (10, 500), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 122),
@@ -314,30 +332,30 @@ if __name__ == '__main__':
             if cv2.waitKey(1) == ord('q'):
                 break
     except KeyboardInterrupt:
-        print("keyboard")
+        print("[MAIN] catched keyboard interrupt")
         pass
     finally: #确保程序结束时关闭所有线程
 
-        print("finally")
+        print("[MAIN] killing all process.")
 
         cv2.destroyAllWindows()
         if save_video:
             if out is not None:
                 out.release()
         detector.stop_save_video()
-        print(1)
+        print('[MAIN] [stopped] video record.')
         detector.stop()
-        print(2)
+        print('[MAIN] [stopped] detector.')
         # detector.release()
-        print(3)
+        print('[MAIN] [released] detector.')
         capture.release()
-        print(4)
-
-        print(4.5)
-        messager.receiver.stop()
-
-        print(5)
-        messager.stop()
-        print(6)
+        print('[MAIN] [released] ' + mode)
+        wf.resetExposure()
+        print('[MAIN] [webcam] exposure reset.')
+        # messager.receiver.stop()
+        print('[MAIN] [stopped] messenger receiver.')
+        # messager.stop()
+        print('[MAIN] [stopped] messenger.')
         lidar.stop()
-        print(7)
+        print('[MAIN] [stopped] lidar.')
+        print('[MAIN] 我测竟然没炸，太不容易了')

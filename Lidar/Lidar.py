@@ -1,21 +1,32 @@
 # 构建Lidar类，作为激光雷达接收类，构建一个ros节点持续订阅/livox/lidar话题，把点云信息写入PcdQueue,整个以子线程形式运行
 from .PointCloud import *
 import threading
-import rospy
+#import rospy
+import rclpy
+from rclpy.node import Node
+from rclpy.executors import MultiThreadedExecutor
 from sensor_msgs.msg import PointCloud2
-from sensor_msgs import point_cloud2
+from sensor_msgs_py import point_cloud2
 
 
-class Lidar:
+class Lidar(Node):
+
     def __init__(self,cfg):
+
+        super().__init__('lidar_listener')
         # 标志位
         self.flag = False  # 激光雷达接收启动标志
         self.init_flag = False # 激光雷达接收线程初始化标志
         self.working_flag = False  # 激光雷达接收线程启动标志
         self.threading = None  # 激光雷达接收子线程
         self.stop_event = threading.Event()  # 线程停止事件
+        print('[lidar] the type of executor is ' + str(type(self.executor)))
+        self._executor = MultiThreadedExecutor()
+        
+        print('[lidar] the type of MultiThreadedExecutor is ' + str(type(MultiThreadedExecutor())))
+        print('[lidar] the type of executor is ' + str(type(self._executor)))
 
-
+        
         # 参数
         self.height_threshold = cfg["lidar"]["height_threshold"]  # 自身高度，用于去除地面点云
         self.min_distance = cfg["lidar"]["min_distance"]  # 最近距离，距离小于这个范围的不要
@@ -28,11 +39,25 @@ class Lidar:
         # 激光雷达线程
         self.lock = threading.Lock()  # 线程锁
 
+        self.subscription = self.create_subscription(
+            PointCloud2,
+            self.lidar_topic_name,
+            self.callback,
+            10 # Queue Depth 10
+        )
+
+        # Avoid being recycled
+        self.subscription
+
+        
         if not self.init_flag:
             # 当雷达还未有一个对象时，初始化接收节点
-            self.listener_begin(self.lidar_topic_name)
-            # print("listener_begin")
+            # self.listener_begin(self.lidar_topic_name)
+            print("[Lidar] listener_begin")
             self.init_flag = True
+            #self.executor = MultiThreadedExecutor(None)
+
+            self._executor.add_node(self)
             self.threading = threading.Thread(target=self.main_loop, daemon=True)
 
 
@@ -41,22 +66,28 @@ class Lidar:
         '''
         开始子线程，即开始spin
         '''
+        print('[Lidar] lidar is already running!')
         if not self.working_flag:
+            print('[Lidar] starting lidar.')
             self.working_flag = True
             self.threading.start()
+            self.get_logger().info("lidar recv thread started.")
 
             # print("start@")
 
-    # 线程关闭
+    # 线程关闭 
     def stop(self):
         '''
         结束子线程
         '''
         if self.working_flag and self.threading is not None: # 关闭时写错了之前，写成了if not self.working_flag
             self.stop_event.set()
-            rospy.signal_shutdown('Stop requested')
+            #rospy.signal_shutdown('Stop requested')
+            self._executor.shutdown()
+            self.destroy_node()
             self.working_flag = False
-            print("stop")
+            print("[Lidar] stop")
+            self.get_logger().info("lidar recv thread stopped.")
 
     # 安全关闭子线程
     # def _async_raise(self,tid, exctype):
@@ -79,16 +110,26 @@ class Lidar:
 
 
     # 节点启动
-    def listener_begin(self,laser_node_name="/livox/lidar"):
-        rospy.init_node('laser_listener', anonymous=True)
+    # def listener_begin(self,laser_node_name="/livox/lidar"):
+    #     rospy.init_node('laser_listener', anonymous=True)
         # print("init ")
-        rospy.Subscriber(laser_node_name, PointCloud2, self.callback)
+    #     rospy.Subscriber(laser_node_name, PointCloud2, self.callback)
         # print("sub")
 
     # 订阅节点子线程
     def main_loop(self):
         # 通过将spin放入子线程来防止其对主线程的阻塞
-        rospy.spin()
+        #rospy.spin()
+
+        # Mitigated to ROS2 
+        self.get_logger().info("[Lidar] Executor begins to spin.")
+        try:
+
+            while not self.stop_event.is_set():
+                self._executor.spin_once(timeout_sec=0.2)
+        except KeyboardInterrupt:
+            pass
+        self.get_logger().info("[Lidar] Executor no longer spins.")
 
 
 

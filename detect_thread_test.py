@@ -13,7 +13,8 @@ mode = "video"  # "video" or "camera"
 round = 1  # 训练赛第几轮
 
 if __name__ == '__main__':
-    video_path = "/home/nvidia/RadarWorkspace/code/Radar_Develop/data/tran_record/0505/ori_data/video10.mp4"
+    # video_path = "videos/data/video.mp4"
+    video_path = "/dev/video0"
     detector_config_path = "configs/detector_config.yaml"
     binocular_camera_cfg_path = "configs/bin_cam_config.yaml"
     main_config_path = "configs/main_config.yaml"
@@ -34,7 +35,10 @@ if __name__ == '__main__':
     start_time = time.time()
 
     # 启动图像处理子线程
-    threading.Thread(target=detector.detect_thread, args=(capture,), daemon=True).start()
+    #threading.Thread(target=detector.detect_thread, args=(capture,), daemon=False)
+    detector.create(capture)
+    detector.start()
+    print("[main] detector thread started.")
 
 
     # 主循环
@@ -53,11 +57,9 @@ if __name__ == '__main__':
         infer_result = detector.get_results()
         if infer_result is not None and len(infer_result) == 2:
             result_img, zip_results = infer_result
-
-            cv2.imshow("result", result_img)
-
-
-        print("out:",avg_fps)
+            if result_img is not None:
+                cv2.imshow("result", result_img)
+                print("out:",avg_fps)
 
         if cv2.waitKey(1) == ord('q'):
             break
